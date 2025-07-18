@@ -44,19 +44,12 @@
     font-size: 0.9em;
     margin-top: 5px;
   }
-  #api-usage {
-    margin-top: 30px;
-    font-size: 0.85em;
-    text-align: center;
-    color: #888;
-  }
 </style>
 </head>
 <body>
 
 <h1>ZWGODS FC - Análise de Jogos</h1>
-<div id="matches"></div>
-<div id="api-usage">Carregando uso da API...</div>
+<div id="matches">Carregando jogos...</div>
 
 <script>
   const apiKey = '6eda2a1c714eade7e2a5dcc5f23aeda7';
@@ -75,7 +68,6 @@
     return response.json();
   }
 
-  // Função para obter jogos próximos (2 dias)
   async function getUpcomingMatches() {
     const now = new Date();
     const from = now.toISOString().split('T')[0];
@@ -85,18 +77,15 @@
     return fetchAPI(url);
   }
 
-  // Função para obter últimos jogos de um time (para análise)
   async function getLastMatches(teamId) {
     const url = `https://${apiHost}/fixtures?team=${teamId}&last=5`;
     return fetchAPI(url);
   }
 
-  // Calcula médias simples para análise de chances
   function calcProbabilities(homeStats, awayStats) {
-    // Exemplo simples baseado em % de vitórias recentes
     const homeWinRate = homeStats.wins / homeStats.total;
     const awayWinRate = awayStats.wins / awayStats.total;
-    const homeAdvantage = 0.1; // Ajuste por jogar em casa
+    const homeAdvantage = 0.1;
 
     let homeChance = homeWinRate + homeAdvantage;
     let awayChance = awayWinRate;
@@ -110,7 +99,6 @@
     };
   }
 
-  // Processa últimos jogos para estatísticas simples
   function processStats(fixtures) {
     let wins = 0;
     fixtures.forEach(fix => {
@@ -124,7 +112,6 @@
     return { wins, total: fixtures.length };
   }
 
-  // Exibe os jogos e análises no site
   async function displayMatches() {
     const container = document.getElementById('matches');
     container.innerHTML = 'Carregando jogos...';
@@ -139,7 +126,6 @@
         const homeId = match.teams.home.id;
         const awayId = match.teams.away.id;
 
-        // Buscar últimos jogos para análise
         const [homeLast, awayLast] = await Promise.all([
           getLastMatches(homeId),
           getLastMatches(awayId)
@@ -157,7 +143,6 @@
 
         const probs = calcProbabilities(homeStats, awayStats);
 
-        // Formatar data
         const date = new Date(match.fixture.date);
         const formattedDate = date.toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' });
 
@@ -188,29 +173,7 @@
     }
   }
 
-  // Pega o uso restante da API
-  async function displayApiUsage() {
-    const url = `https://${apiHost}/status`;
-    try {
-      const data = await fetchAPI(url);
-      if (data && data.requests) {
-        document.getElementById('api-usage').textContent =
-          `Requisições usadas hoje: ${data.requests.used} / Limite diário: ${data.requests.limit}`;
-      } else {
-        document.getElementById('api-usage').textContent = 'Não foi possível obter uso da API.';
-      }
-    } catch {
-      document.getElementById('api-usage').textContent = 'Erro ao consultar uso da API.';
-    }
-  }
-
-  // Inicializa tudo
-  async function init() {
-    await displayMatches();
-    await displayApiUsage();
-  }
-
-  init();
+  displayMatches();
 </script>
 
 </body>
