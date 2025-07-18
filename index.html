@@ -1,0 +1,217 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>ZWGODS FC - Análise de Jogos</title>
+<style>
+  body {
+    background-color: #121212;
+    color: #fff;
+    font-family: Arial, sans-serif;
+    padding: 20px;
+  }
+  h1 {
+    color: #00ffcc;
+    text-align: center;
+  }
+  .match {
+    background: #1e1e1e;
+    margin: 15px 0;
+    padding: 15px;
+    border-radius: 10px;
+    display: flex;
+    align-items: center;
+    gap: 15px;
+  }
+  .team {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    width: 45%;
+  }
+  .team-logo {
+    width: 40px;
+    height: 40px;
+    object-fit: contain;
+  }
+  .details {
+    width: 10%;
+    text-align: center;
+  }
+  .info {
+    color: #ccc;
+    font-size: 0.9em;
+    margin-top: 5px;
+  }
+  #api-usage {
+    margin-top: 30px;
+    font-size: 0.85em;
+    text-align: center;
+    color: #888;
+  }
+</style>
+</head>
+<body>
+
+<h1>ZWGODS FC - Análise de Jogos</h1>
+<div id="matches"></div>
+<div id="api-usage">Carregando uso da API...</div>
+
+<script>
+  const apiKey = '6eda2a1c714eade7e2a5dcc5f23aeda7';
+  const apiHost = 'v3.football.api-sports.io';
+
+  async function fetchAPI(url) {
+    const response = await fetch(url, {
+      headers: {
+        'X-RapidAPI-Key': apiKey,
+        'X-RapidAPI-Host': apiHost
+      }
+    });
+    if (!response.ok) {
+      throw new Error('Erro na API: ' + response.status);
+    }
+    return response.json();
+  }
+
+  // Função para obter jogos próximos (2 dias)
+  async function getUpcomingMatches() {
+    const now = new Date();
+    const from = now.toISOString().split('T')[0];
+    const toDate = new Date(now.getTime() + 2*86400000);
+    const to = toDate.toISOString().split('T')[0];
+    const url = `https://${apiHost}/fixtures?from=${from}&to=${to}`;
+    return fetchAPI(url);
+  }
+
+  // Função para obter últimos jogos de um time (para análise)
+  async function getLastMatches(teamId) {
+    const url = `https://${apiHost}/fixtures?team=${teamId}&last=5`;
+    return fetchAPI(url);
+  }
+
+  // Calcula médias simples para análise de chances
+  function calcProbabilities(homeStats, awayStats) {
+    // Exemplo simples baseado em % de vitórias recentes
+    const homeWinRate = homeStats.wins / homeStats.total;
+    const awayWinRate = awayStats.wins / awayStats.total;
+    const homeAdvantage = 0.1; // Ajuste por jogar em casa
+
+    let homeChance = homeWinRate + homeAdvantage;
+    let awayChance = awayWinRate;
+    if (homeChance > 1) homeChance = 1;
+
+    const drawChance = 1 - (homeChance + awayChance);
+    return {
+      home: Math.round(homeChance * 100),
+      draw: Math.round(drawChance * 100),
+      away: Math.round(awayChance * 100)
+    };
+  }
+
+  // Processa últimos jogos para estatísticas simples
+  function processStats(fixtures) {
+    let wins = 0;
+    fixtures.forEach(fix => {
+      if (!fix.goals.home || !fix.goals.away) return;
+      const isHome = fix.teams.home.id === fix.teamId;
+      const goalsFor = isHome ? fix.goals.home : fix.goals.away;
+      const goalsAgainst = isHome ? fix.goals.away : fix.goals.home;
+
+      if (goalsFor > goalsAgainst) wins++;
+    });
+    return { wins, total: fixtures.length };
+  }
+
+  // Exibe os jogos e análises no site
+  async function displayMatches() {
+    const container = document.getElementById('matches');
+    container.innerHTML = 'Carregando jogos...';
+
+    try {
+      const data = await getUpcomingMatches();
+      const matches = data.response;
+
+      container.innerHTML = '';
+
+      for (const match of matches) {
+        const homeId = match.teams.home.id;
+        const awayId = match.teams.away.id;
+
+        // Buscar últimos jogos para análise
+        const [homeLast, awayLast] = await Promise.all([
+          getLastMatches(homeId),
+          getLastMatches(awayId)
+        ]);
+
+        const homeStats = processStats(homeLast.response);
+        homeStats.wins = homeStats.wins || 0;
+        homeStats.total = homeStats.total || 1;
+        homeStats.teamId = homeId;
+
+        const awayStats = processStats(awayLast.response);
+        awayStats.wins = awayStats.wins || 0;
+        awayStats.total = awayStats.total || 1;
+        awayStats.teamId = awayId;
+
+        const probs = calcProbabilities(homeStats, awayStats);
+
+        // Formatar data
+        const date = new Date(match.fixture.date);
+        const formattedDate = date.toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' });
+
+        const div = document.createElement('div');
+        div.className = 'match';
+        div.innerHTML = `
+          <div class="team">
+            <img src="${match.teams.home.logo}" alt="Logo ${match.teams.home.name}" class="team-logo" />
+            <strong>${match.teams.home.name}</strong>
+          </div>
+          <div class="details">
+            <div>${formattedDate}</div>
+            <div class="info">
+              <div>Vitória casa: ${probs.home}%</div>
+              <div>Empate: ${probs.draw}%</div>
+              <div>Vitória visitante: ${probs.away}%</div>
+            </div>
+          </div>
+          <div class="team">
+            <img src="${match.teams.away.logo}" alt="Logo ${match.teams.away.name}" class="team-logo" />
+            <strong>${match.teams.away.name}</strong>
+          </div>
+        `;
+        container.appendChild(div);
+      }
+    } catch (err) {
+      container.innerHTML = `<p>Erro ao carregar jogos: ${err.message}</p>`;
+    }
+  }
+
+  // Pega o uso restante da API
+  async function displayApiUsage() {
+    const url = `https://${apiHost}/status`;
+    try {
+      const data = await fetchAPI(url);
+      if (data && data.requests) {
+        document.getElementById('api-usage').textContent =
+          `Requisições usadas hoje: ${data.requests.used} / Limite diário: ${data.requests.limit}`;
+      } else {
+        document.getElementById('api-usage').textContent = 'Não foi possível obter uso da API.';
+      }
+    } catch {
+      document.getElementById('api-usage').textContent = 'Erro ao consultar uso da API.';
+    }
+  }
+
+  // Inicializa tudo
+  async function init() {
+    await displayMatches();
+    await displayApiUsage();
+  }
+
+  init();
+</script>
+
+</body>
+</html>
